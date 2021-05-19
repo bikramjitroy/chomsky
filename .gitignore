@@ -1,0 +1,4 @@
+rasa_config
+__pycache__
+.vscode/
+resources/action/
