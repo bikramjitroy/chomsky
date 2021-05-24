@@ -109,9 +109,6 @@ def processFlow(story_traverse_list):
                     rasa_actions[action_name] = {"name": action_name, "data" : nodes_and_edges.data, "type" : "suggestions"}
                 
                 story_flow.append('  - action: action_' + rasa_actions[action_name]["name"])
-                # story_flow.append('  - slot_was_set:')
-                # story_flow.append('    - suggestion_chip: ' + rasa_actions[action_name]["name"] +'')
-                # story_flow.append('  - action: action_suggestions_response')
 
             if nodes_and_edges.data['subtype'] == 'text':
                 action_name = nodes_and_edges.data.get('var_name')
@@ -119,9 +116,6 @@ def processFlow(story_traverse_list):
                     rasa_actions[action_name] = {"name": action_name, "data" : nodes_and_edges.data, "type" : "text"}
 
                 story_flow.append('  - action: action_' + rasa_actions[action_name]["name"])
-                # story_flow.append('  - slot_was_set:')
-                # story_flow.append('    - text_response: ' + rasa_actions[action_name]["name"] +'')
-                # story_flow.append('  - action: action_text_response')
                 
             if nodes_and_edges.data['subtype'] == 'closenode':
                 action_name = nodes_and_edges.data.get('var_name')
@@ -129,9 +123,15 @@ def processFlow(story_traverse_list):
                     rasa_actions[action_name] = {"name": action_name, "data" : nodes_and_edges.data, "type" : "close"}
 
                 story_flow.append('  - action: action_' + rasa_actions[action_name]["name"])
-                # story_flow.append('  - slot_was_set:')
-                # story_flow.append('    - disposition: ' + rasa_actions[action_name]["name"] +'')
-                # story_flow.append('  - action: action_dispose')
+
+            if nodes_and_edges.data['subtype'] == 'apicalling':
+                action_name = nodes_and_edges.data.get('var_name')
+                if rasa_actions.get(action_name) == None:
+                    #{'name': 'bye_api', 'data': {'label': 'Api Calling', 'description': 'Next node could be anything', 'subtype': 'apicalling', 'type': 'node', 'image': 'action.svg', 'class': 'blockyGrey', 'var_name': 'bye_api', 'url': 'http://localhost:9001/', 'request_json': '{"customer_name":{{name}}}', 'response_json': 'date_of_birth', 'response_status': 'status_code'}, 'type': 'apicalling'}
+
+                    rasa_actions[action_name] = {"name": action_name, "data" : nodes_and_edges.data, "type" : "apicalling"}
+
+                story_flow.append('  - action: action_' + rasa_actions[action_name]["name"])
 
         if nodes_and_edges.data['type'] == 'edge':
             if nodes_and_edges.data['label'] != '':
@@ -276,6 +276,9 @@ from rasa_sdk import Action, Tracker
 from rasa_sdk.events import SlotSet
 from rasa_sdk.executor import CollectingDispatcher
 
+import requests
+import json
+
 import configs
 
 def resolve_response(response_text, tracker):
@@ -306,6 +309,37 @@ def resolve_response(response_text, tracker):
    if slot_str:
       response_text = response_text.replace(slot_str, slot_value)
       response_text = resolve_response(response_text, tracker)
+
+   return response_text
+
+def resolve_json(response_text, tracker):
+   found_var = False
+   start_index = 0
+   count = 0
+
+   slot_str = None
+   slot_value = None
+   for x in response_text:
+
+      if found_var == True and x == '}' and response_text[count + 1]== '}':
+         found_var = False
+         
+         slot_name = response_text[start_index:count].strip()
+         slot_str = response_text[start_index-2:count+2]
+         #fetch value from tracker - make it a string for correct replacement
+         slot_value = str(tracker.get_slot(slot_name))
+         print("Var-", slot_name, slot_str, slot_value)
+         break
+
+      if x == '{' and response_text[count + 1]== '{':
+         found_var = True
+         start_index = count + 2
+
+      count = count + 1
+
+   if slot_str:
+      response_text = response_text.replace(slot_str, '"' + slot_value + '"')
+      response_text = resolve_json(response_text, tracker)
 
    return response_text
 
@@ -402,6 +436,45 @@ class ActionDispose{{ counter }}(Action):
     dispose_tm = Template(dispose_template_raw)
 
 
+
+    api_template_raw = '''
+class ActionAPICall{{ counter }}(Action):
+   def name(self) -> Text:
+      return "action_{{ name }}"
+
+   def run(self,
+           dispatcher: CollectingDispatcher,
+           tracker: Tracker,
+           domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+
+      #URL could be static or pick up from SLOT
+      #url = tracker.get_slot('{{url}}')
+      url = "{{url}}"
+
+      #url = "http://localhost:9076/test"
+      request_json = '{{request_data}}'
+      payload = resolve_json(request_json, tracker)
+
+      print("API payload:", url, payload)
+
+      req = requests.post(url, json=json.loads(payload))
+      print("API response code:", req.status_code)
+
+      result = req.json()
+
+      response_json_data = {{response_json}}
+      
+      slots = []
+      for key in response_json_data:
+           slots.append(SlotSet(key, response_json_data[key]))
+
+      return slots     
+    '''
+    api_tm = Template(api_template_raw)
+
+
+
+
     with open(action_dir + 'action.py', 'w') as configs:
         configs.write(header_msg)
 
@@ -436,6 +509,14 @@ class ActionDispose{{ counter }}(Action):
             if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "close" :
                 d_msg = dispose_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter)
                 configs.write(d_msg)  
+
+            if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "apicalling" :
+                print("API Calling", rasa_actions[rasa_actions_key]["data"]["response_json"])
+
+                api_msg = api_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter, url=rasa_actions[rasa_actions_key]["data"]["url"], request_data=rasa_actions[rasa_actions_key]["data"]["request_json"], response_json=rasa_actions[rasa_actions_key]["data"]["response_json"])
+                configs.write(api_msg)  
+
+
     return
 
 generate_action_class_file(rasa_actions)
