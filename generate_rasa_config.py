@@ -50,6 +50,8 @@ story_counter = 0
 
 rasa_intents = {}
 rasa_actions = {}
+rasa_slots = {}
+rasa_entities = {}
 
 story_file = open(story_file_name, "w")
 story_file.write('version: "2.0"\n')
@@ -69,11 +71,28 @@ def processFlow(story_traverse_list):
             if nodes_and_edges.data['label'] == 'Start':
                 story_flow.append('  steps:')
                 story_flow.append('  - intent: start')
+                story_flow.append('  - action: action_initialize')
 
                 # Create a triggeting intent which will start the BOT
                 intent_name = "start"
                 if rasa_intents.get(intent_name) == None:
                     rasa_intents[intent_name] = {"name": intent_name, "data" : nodes_and_edges.data}
+                    #In this actions all slots default value is set
+                    rasa_actions["initialize"] = {"name": "initialize", "data" : nodes_and_edges.data, "type" : "initialize"}
+
+                    #SLOTS extraction from start node
+                    variables = nodes_and_edges.data['description']
+                    for variable in variables.splitlines():
+                        key_value = variable.split('=')
+                        slot_name = key_value[0]
+                        slot_value = None
+                        if len(key_value) > 1:
+                            slot_value = key_value[1]
+                        rasa_slots[slot_name] = {"name": slot_name, "value": slot_value, "type": "any"}
+                        rasa_entities[slot_name] = {"name": slot_name}
+
+                    #print("START DATA", rasa_slots)
+
 
             if nodes_and_edges.data['subtype'] == 'userinput':
                 #print("**Comment-User-Response**", nodes_and_edges.data['description'])
@@ -182,30 +201,23 @@ def generate_domain(rasa_intents, rasa_actions):
         for rasa_intent_key in rasa_intents:
             intent_name = rasa_intents[rasa_intent_key]['name']
             f.write('  - ' + intent_name  +'\n')
+ 
+        #Response slots are fixed and logic control by slots value
+        f.write('\nentities:\n')        
+        for rasa_entity_key in rasa_entities:
+            rasa_entity = rasa_entities[rasa_entity_key]
+            f.write('  - ' + rasa_entity['name'] + '\n')
 
         #Response slots are fixed and logic control by slots value
-        # f.write('\nslots:\n')
-        # f.write('  suggestion_chip:\n')
-        # f.write('    type: text\n')
-        # #f.write('    type: addons.custom_slots.SuggestionSlot\n')
-
-        # f.write('    influence_conversation: false\n')
-        # f.write('  text_response:\n')
-        # f.write('    type: text\n')
-        # #f.write('    type: addons.custom_slots.TextSlot\n')
-
-        # f.write('    influence_conversation: false\n')
-        # f.write('  disposition:\n')
-        # f.write('    type: text\n')
-        # #f.write('    type: addons.custom_slots.DispositionSlot\n')
-
-        # f.write('    influence_conversation: false\n')
+        f.write('\nslots:\n')        
+        for rasa_slot_key in rasa_slots:
+            rasa_slot = rasa_slots[rasa_slot_key]
+            f.write('  ' + rasa_slot['name'] + ':\n')
+            f.write('    type: ' + rasa_slot['type'] + '\n')
+            f.write('    influence_conversation: false\n')
 
         #Action responses are fixed and logic control by slots
         f.write('\nactions:\n')
-        # f.write('  - action_suggestions_response\n')
-        # f.write('  - action_text_response\n')
-        # f.write('  - action_dispose\n')
         for rasa_actions_key in rasa_actions:
             action_name = rasa_actions[rasa_actions_key]['name']
             #print(action_name, rasa_actions[rasa_actions_key])
@@ -265,9 +277,66 @@ from rasa_sdk.events import SlotSet
 from rasa_sdk.executor import CollectingDispatcher
 
 import configs
+
+def resolve_response(response_text, tracker):
+   found_var = False
+   start_index = 0
+   count = 0
+
+   slot_str = None
+   slot_value = None
+   for x in response_text:
+
+      if found_var == True and x == '}' and response_text[count + 1]== '}':
+         found_var = False
+         
+         slot_name = response_text[start_index:count].strip()
+         slot_str = response_text[start_index-2:count+2]
+         #fetch value from tracker - make it a string for correct replacement
+         slot_value = str(tracker.get_slot(slot_name))
+         print("Var-", slot_name, slot_str, slot_value)
+         break
+
+      if x == '{' and response_text[count + 1]== '{':
+         found_var = True
+         start_index = count + 2
+
+      count = count + 1
+
+   if slot_str:
+      response_text = response_text.replace(slot_str, slot_value)
+      response_text = resolve_response(response_text, tracker)
+
+   return response_text
+
     '''
     header_tm = Template(headers)
     header_msg = header_tm.render()
+
+
+    initialize_template_raw = '''
+class ActionInitialize(Action):
+   def name(self) -> Text:
+      return "action_initialize"
+
+   def run(self,
+           dispatcher: CollectingDispatcher,
+           tracker: Tracker,
+           domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+
+      slots = []
+      {{value_set}}
+      return slots
+    '''
+    initialize_tm = Template(initialize_template_raw)
+
+    initialize_variable_raw = '''
+      if tracker.get_slot("{{name}}") is None:
+           slots.append(SlotSet("{{name}}", "{{value}}"))
+    '''
+    initialize_var_tm = Template(initialize_variable_raw)
+
+
 
     suggestion_template_raw = '''
 class ActionSuggestionChip{{ counter }}(Action):
@@ -283,6 +352,7 @@ class ActionSuggestionChip{{ counter }}(Action):
 
       suggestion_chip_options_json = configs.data['suggestions_options_' + suggestion_chip]
       suggestion_chip_text = configs.data['suggestions_text_' + suggestion_chip]
+      suggestion_chip_text = resolve_response(suggestion_chip_text, tracker)
 
       dispatcher.utter_message(text=suggestion_chip_text, platform_json=suggestion_chip_options_json)
 
@@ -302,6 +372,8 @@ class ActionTextResponse{{ counter }}(Action):
 
       text_response = "{{ name }}"
       text_response_text = configs.data['text_' + text_response]
+      text_response_text = resolve_response(text_response_text, tracker)
+
 
       dispatcher.utter_message(text=text_response_text, platform_json=None)
 
@@ -329,12 +401,29 @@ class ActionDispose{{ counter }}(Action):
     '''
     dispose_tm = Template(dispose_template_raw)
 
+
     with open(action_dir + 'action.py', 'w') as configs:
         configs.write(header_msg)
 
         class_counter = 0
         for rasa_actions_key in rasa_actions:
             class_counter = class_counter + 1
+
+            #INITIALIZE THE SLOTS in action_initialize - set default values if its not set 
+            if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "initialize" :
+
+                all_slot_str = []
+                for slot in rasa_slots:
+                    if rasa_slots[slot].get("value"):
+                        slot_name =  rasa_slots[slot]["name"]
+                        slot_value = rasa_slots[slot]["value"]
+
+                        if_cond = initialize_var_tm.render(name=slot_name, value=slot_value)
+                        all_slot_str.append(if_cond)
+
+                final_slots = ''.join(all_slot_str)
+                i_msg = initialize_tm.render(value_set=final_slots)
+                configs.write(i_msg)
 
             if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "suggestions" :
                 s_msg = suggestion_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter)

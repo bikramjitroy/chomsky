@@ -11,6 +11,10 @@ python generate_rasa_config.py
 cd rasa_config
 
 #Run BOT Server
+
+#Disable telemetry
+rasa telemetry disable
+#Run rasa x 
 rasa x
 
 #Run action Server
