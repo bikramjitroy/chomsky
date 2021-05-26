@@ -6,6 +6,7 @@ import shutil
 import os
 
 from jinja2 import Template
+from graph_structure import Node, Edge
 
 
 # %%
@@ -48,6 +49,8 @@ config_file_name = action_dir + '/configs.py'
 
 story_counter = 0
 
+action_nodes = ['suggestionchip', 'text', 'closenode', 'apicalling']
+
 rasa_intents = {}
 rasa_actions = {}
 rasa_slots = {}
@@ -66,19 +69,19 @@ def processFlow(story_traverse_list):
     story_flow.append('\n- story: story of Hi and Bye ' + str(story_counter))
     story_counter = story_counter + 1
 
+
+    next_of_initialize = True
     for nodes_and_edges in story_traverse_list:
         if nodes_and_edges.data['type'] == 'node':
             if nodes_and_edges.data['label'] == 'Start':
                 story_flow.append('  steps:')
                 story_flow.append('  - intent: start')
-                story_flow.append('  - action: action_initialize')
 
                 # Create a triggeting intent which will start the BOT
                 intent_name = "start"
                 if rasa_intents.get(intent_name) == None:
                     rasa_intents[intent_name] = {"name": intent_name, "data" : nodes_and_edges.data}
                     #In this actions all slots default value is set
-                    rasa_actions["initialize"] = {"name": "initialize", "data" : nodes_and_edges.data, "type" : "initialize"}
 
                     #SLOTS extraction from start node
                     variables = nodes_and_edges.data['description']
@@ -94,6 +97,9 @@ def processFlow(story_traverse_list):
                     #print("START DATA", rasa_slots)
 
 
+
+
+
             if nodes_and_edges.data['subtype'] == 'userinput':
                 #print("**Comment-User-Response**", nodes_and_edges.data['description'])
                 #Multiple incoming edges -- create a checkpoint
@@ -101,37 +107,25 @@ def processFlow(story_traverse_list):
                     story_flow.append('  - checkpoint: check_flow_finished')
 
 
-            if nodes_and_edges.data['subtype'] == 'suggestionchip':
+
+            if nodes_and_edges.data['subtype'] == 'initialize':
+                action_name = 'initialize'
+                story_flow.append('  - action: action_' + action_name)
+                if rasa_actions.get(action_name) == None:
+                    rasa_actions[action_name] = {"name": action_name, "data" : nodes_and_edges.data, "type" : action_name}
+
+
+            #Handle all actions 
+            if nodes_and_edges.data['subtype'] in action_nodes:
                 #Get the name of suggestion chip and its data
                 action_name = nodes_and_edges.data.get('var_name')
 
                 if rasa_actions.get(action_name) == None:
-                    rasa_actions[action_name] = {"name": action_name, "data" : nodes_and_edges.data, "type" : "suggestions"}
+                    rasa_actions[action_name] = {"name": action_name, "data" : nodes_and_edges.data, "type" : nodes_and_edges.data['subtype']}
                 
                 story_flow.append('  - action: action_' + rasa_actions[action_name]["name"])
 
-            if nodes_and_edges.data['subtype'] == 'text':
-                action_name = nodes_and_edges.data.get('var_name')
-                if rasa_actions.get(action_name) == None:
-                    rasa_actions[action_name] = {"name": action_name, "data" : nodes_and_edges.data, "type" : "text"}
 
-                story_flow.append('  - action: action_' + rasa_actions[action_name]["name"])
-                
-            if nodes_and_edges.data['subtype'] == 'closenode':
-                action_name = nodes_and_edges.data.get('var_name')
-                if rasa_actions.get(action_name) == None:
-                    rasa_actions[action_name] = {"name": action_name, "data" : nodes_and_edges.data, "type" : "close"}
-
-                story_flow.append('  - action: action_' + rasa_actions[action_name]["name"])
-
-            if nodes_and_edges.data['subtype'] == 'apicalling':
-                action_name = nodes_and_edges.data.get('var_name')
-                if rasa_actions.get(action_name) == None:
-                    #{'name': 'bye_api', 'data': {'label': 'Api Calling', 'description': 'Next node could be anything', 'subtype': 'apicalling', 'type': 'node', 'image': 'action.svg', 'class': 'blockyGrey', 'var_name': 'bye_api', 'url': 'http://localhost:9001/', 'request_json': '{"customer_name":{{name}}}', 'response_json': 'date_of_birth', 'response_status': 'status_code'}, 'type': 'apicalling'}
-
-                    rasa_actions[action_name] = {"name": action_name, "data" : nodes_and_edges.data, "type" : "apicalling"}
-
-                story_flow.append('  - action: action_' + rasa_actions[action_name]["name"])
 
         if nodes_and_edges.data['type'] == 'edge':
             if nodes_and_edges.data['label'] != '':
@@ -164,6 +158,10 @@ def traverse_graph(node, list_of_prev_nodes, append_nodes):
         current_append_node.append(edge.destination_node)
         destination_node = edge.destination_node
 
+        #For consecutive actions - Add next_node_data 
+        if node.data.get('subtype') in action_nodes and destination_node.data.get('subtype') in action_nodes:
+            node.data['next_node_data'] = destination_node.data
+
         if destination_node.traversed == True:
             #print("Loopback - New Story:: ", edge.source_node.node_id, "->" , edge.edge_id ,"->",edge.destination_node.node_id)
 
@@ -174,7 +172,17 @@ def traverse_graph(node, list_of_prev_nodes, append_nodes):
 
     return
 
-traverse_graph(start_node, list([]), list([start_node]))
+#Add initialize action
+initialize_node = Node("initialize_node", "node")
+initialize_node.data = {"name":"initialize", "type":"node", "subtype": "initialize", "label":"initialize" ,"data": start_node.data}
+initialize_node.data["next_node_data"] = start_node.outgoing_edges[0].destination_node.data
+#print("daaa",  start_node.outgoing_edges[0].destination_node.data)
+
+initialize_edge = Edge("initialize_edge", "edge")
+initialize_edge.data = {"type":"edge", "subtype": "edge", "label": ""}
+
+
+traverse_graph(start_node, list([]), list([start_node, initialize_node, initialize_edge]))
 story_file.close()
 
 
@@ -232,6 +240,8 @@ def generate_domain(rasa_intents, rasa_actions):
         f.write('\nsession_config:\n')
         f.write('  session_expiration_time: 30\n')
         f.write('  carry_over_slots_to_new_session: true\n')
+        f.write('\nconfig:\n')
+        f.write('  store_entities_as_slots: true\n')
     return
 
 generate_domain(rasa_intents, rasa_actions)
@@ -245,7 +255,7 @@ def generate_action_slots(rasa_actions):
         configs.write("data={}\n")
         for rasa_actions_key in rasa_actions:
 
-            if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "suggestions" :
+            if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "suggestionchip" :
                 data = rasa_actions[rasa_actions_key]['data']
                 name = rasa_actions[rasa_actions_key]['name']
 
@@ -258,7 +268,7 @@ def generate_action_slots(rasa_actions):
 
                 configs.write('data["text_' + name + '"] = "' + data['description'] + '"\n')
 
-            if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "close" :
+            if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "closenode" :
                 data = rasa_actions[rasa_actions_key]['data']
                 name = rasa_actions[rasa_actions_key]['name']
                 configs.write('data["disposition_' + name + '"] = "' + data['dispositionName'] + '"\n')            
@@ -273,7 +283,7 @@ def generate_action_class_file(rasa_actions):
 #!/usr/bin/env python3
 from typing import Text, Dict, Any, List
 from rasa_sdk import Action, Tracker
-from rasa_sdk.events import SlotSet
+from rasa_sdk.events import SlotSet, FollowupAction
 from rasa_sdk.executor import CollectingDispatcher
 
 import requests
@@ -360,6 +370,12 @@ class ActionInitialize(Action):
 
       slots = []
       {{value_set}}
+      
+      next_is_action = True
+      if next_is_action == {{next_is_action}}:
+          #Action name which will execute next
+          slots.append(FollowupAction("{{followup_action_name}}"))
+
       return slots
     '''
     initialize_tm = Template(initialize_template_raw)
@@ -390,7 +406,14 @@ class ActionSuggestionChip{{ counter }}(Action):
 
       dispatcher.utter_message(text=suggestion_chip_text, platform_json=suggestion_chip_options_json)
 
-      return []
+      slots = []
+
+      next_is_action = True
+      if next_is_action == {{next_is_action}}:
+          #Action name which will execute next
+          slots.append(FollowupAction("{{followup_action_name}}"))
+
+      return slots
     '''
     suggestion_tm = Template(suggestion_template_raw)
 
@@ -411,7 +434,14 @@ class ActionTextResponse{{ counter }}(Action):
 
       dispatcher.utter_message(text=text_response_text, platform_json=None)
 
-      return []
+      slots = []
+
+      next_is_action = True
+      if next_is_action == {{next_is_action}}:
+          #Action name which will execute next
+          slots.append(FollowupAction("{{followup_action_name}}"))
+
+      return slots
     '''
     text_tm = Template(text_template_raw)
 
@@ -431,7 +461,14 @@ class ActionDispose{{ counter }}(Action):
 
       #dispatcher.utter_message(text=suggestion_chip_text, platform_json=suggestion_chip_options_json)
 
-      return []
+      slots = []
+
+      next_is_action = True
+      if next_is_action == {{next_is_action}}:
+          #Action name which will execute next
+          slots.append(FollowupAction("{{followup_action_name}}"))
+
+      return slots
     '''
     dispose_tm = Template(dispose_template_raw)
 
@@ -463,16 +500,19 @@ class ActionAPICall{{ counter }}(Action):
       result = req.json()
 
       response_json_data = {{response_json}}
-      
+
       slots = []
       for key in response_json_data:
            slots.append(SlotSet(key, response_json_data[key]))
 
+      next_is_action = True
+      if next_is_action == {{next_is_action}}:
+          #Action name which will execute next
+          slots.append(FollowupAction("{{followup_action_name}}"))
+
       return slots     
     '''
     api_tm = Template(api_template_raw)
-
-
 
 
     with open(action_dir + 'action.py', 'w') as configs:
@@ -482,8 +522,17 @@ class ActionAPICall{{ counter }}(Action):
         for rasa_actions_key in rasa_actions:
             class_counter = class_counter + 1
 
+            next_is_action = False
+            followup_action_name = None
+
             #INITIALIZE THE SLOTS in action_initialize - set default values if its not set 
+
+
             if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "initialize" :
+ 
+                if rasa_actions[rasa_actions_key]["data"].get('next_node_data'):
+                    next_is_action = True
+                    followup_action_name =  "action_" + rasa_actions[rasa_actions_key]["data"].get('next_node_data')['var_name']
 
                 all_slot_str = []
                 for slot in rasa_slots:
@@ -495,26 +544,37 @@ class ActionAPICall{{ counter }}(Action):
                         all_slot_str.append(if_cond)
 
                 final_slots = ''.join(all_slot_str)
-                i_msg = initialize_tm.render(value_set=final_slots)
+                i_msg = initialize_tm.render(value_set=final_slots, next_is_action=next_is_action, followup_action_name=followup_action_name)
                 configs.write(i_msg)
+                continue
 
-            if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "suggestions" :
-                s_msg = suggestion_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter)
-                configs.write(s_msg)
 
-            if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "text" :
-                t_msg = text_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter)
-                configs.write(t_msg)
 
-            if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "close" :
-                d_msg = dispose_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter)
-                configs.write(d_msg)  
+            if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') in action_nodes:
 
-            if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "apicalling" :
-                print("API Calling", rasa_actions[rasa_actions_key]["data"]["response_json"])
+                #If next node data is defined, then next node is action node to be treated as FollowupAction
+                if rasa_actions[rasa_actions_key]["data"].get('next_node_data'):
+                    #print(rasa_actions_key, rasa_actions[rasa_actions_key])
+                    next_is_action = True
+                    followup_action_name = "action_" + rasa_actions[rasa_actions_key]['data'].get('next_node_data')['var_name']
 
-                api_msg = api_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter, url=rasa_actions[rasa_actions_key]["data"]["url"], request_data=rasa_actions[rasa_actions_key]["data"]["request_json"], response_json=rasa_actions[rasa_actions_key]["data"]["response_json"])
-                configs.write(api_msg)  
+                if rasa_actions[rasa_actions_key].get('type') == "suggestionchip" :
+                    #print("Suggestion Chip -",   rasa_actions[rasa_actions_key]['name'], rasa_actions[rasa_actions_key].get('next_node_data'))
+                    s_msg = suggestion_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter, next_is_action=next_is_action, followup_action_name=followup_action_name)
+                    configs.write(s_msg)
+
+                if rasa_actions[rasa_actions_key].get('type') == "text" :
+                    t_msg = text_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter, next_is_action=next_is_action, followup_action_name=followup_action_name)
+                    configs.write(t_msg)
+
+                if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "closenode" :
+                    d_msg = dispose_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter, next_is_action=next_is_action, followup_action_name=followup_action_name)
+                    configs.write(d_msg)  
+
+                if rasa_actions[rasa_actions_key].get('type') == "apicalling" :
+                    #print("API Calling", rasa_actions[rasa_actions_key]["data"])
+                    api_msg = api_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter, url=rasa_actions[rasa_actions_key]["data"]["url"], request_data=rasa_actions[rasa_actions_key]["data"]["request_json"], response_json=rasa_actions[rasa_actions_key]["data"]["response_json"], next_is_action=next_is_action, followup_action_name=followup_action_name)
+                    configs.write(api_msg)  
 
 
     return
