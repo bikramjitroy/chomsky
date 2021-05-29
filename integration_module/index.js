@@ -23,5 +23,16 @@ app.post('/test', (request, response) => {
 });
 
 
+app.post('/order_status', (request, response) => {
+  console.log("request", request.body)
+  response.json({"order_status":"ONGOING"});
+});
+
+app.post('/order', (request, response) => {
+  console.log("request", request.body)
+  response.json({"order_status":"success"});
+});
+
+
 // set the server to listen on port 3000
 app.listen(port, () => console.log(`Listening on port ${port}`));

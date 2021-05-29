@@ -12,7 +12,7 @@ from graph_structure import Node, Edge
 # %%
 
 start_node = populateGraphFromJson('sample_json/Bot-Json.json')
-base_dir = "rasa_config_new/"
+base_dir = "rasa_config/"
 
 
 pathlib.Path(base_dir).mkdir(parents=True, exist_ok=True)
@@ -456,6 +456,7 @@ class ActionSuggestionChip{{ counter }}(Action):
 
       suggestion_chip_options_json = configs.data['suggestions_options_{{ name }}']
       suggestion_chip_text = configs.data['suggestions_text_{{ name }}']
+      print("SuggestionText", suggestion_chip_text)
       suggestion_chip_text = resolve_response(suggestion_chip_text, tracker)
       dispatcher.utter_message(text=suggestion_chip_text, platform_json=suggestion_chip_options_json)
 
