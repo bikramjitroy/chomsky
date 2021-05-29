@@ -11,8 +11,8 @@ from graph_structure import Node, Edge
 
 # %%
 
-start_node = populateGraphFromJson('sample_json/Bot-Json_mod.json')
-base_dir = "rasa_config/"
+start_node = populateGraphFromJson('sample_json/Bot-Json.json')
+base_dir = "rasa_config_new/"
 
 
 pathlib.Path(base_dir).mkdir(parents=True, exist_ok=True)
@@ -49,7 +49,7 @@ config_file_name = action_dir + '/configs.py'
 
 story_counter = 0
 
-action_nodes = ['suggestionchip', 'text', 'closenode', 'apicalling']
+action_nodes = ['suggestionchip', 'text', 'closenode', 'apicalling','carousel']
 
 rasa_intents = {}
 rasa_actions = {}
@@ -66,7 +66,8 @@ def processFlow(story_traverse_list):
     #print("Story Start->")
     story_flow = []
 
-    story_flow.append('\n- story: story of Hi and Bye ' + str(story_counter))
+    story = '\n- story: Generated ' + str(story_counter)
+    story_flow.append(story)
     story_counter = story_counter + 1
 
 
@@ -82,59 +83,98 @@ def processFlow(story_traverse_list):
                 if rasa_intents.get(intent_name) == None:
                     rasa_intents[intent_name] = {"name": intent_name, "data" : nodes_and_edges.data}
                     #In this actions all slots default value is set
-
                     #SLOTS extraction from start node
-                    variables = nodes_and_edges.data['description']
-                    for variable in variables.splitlines():
-                        key_value = variable.split('=')
-                        slot_name = key_value[0]
-                        slot_value = None
-                        if len(key_value) > 1:
-                            slot_value = key_value[1]
+                    slot_json = nodes_and_edges.data['bot_slots']
+                    for slot in slot_json:
+                        slot_name = slot['slot_name']
+                        slot_value = slot['slot_value']
+                        if slot_value == '':
+                            slot_value = None
                         rasa_slots[slot_name] = {"name": slot_name, "value": slot_value, "type": "any"}
                         rasa_entities[slot_name] = {"name": slot_name}
 
-                    #print("START DATA", rasa_slots)
-
-
-
-
-
+            #Edges of userinput are intents - Handle that in Edges - This is a marker Node
             if nodes_and_edges.data['subtype'] == 'userinput':
-                #print("**Comment-User-Response**", nodes_and_edges.data['description'])
-                #Multiple incoming edges -- create a checkpoint
-                if len(nodes_and_edges.incoming_edges) > 1 :
-                    story_flow.append('  - checkpoint: check_flow_finished')
-
-
-
-            if nodes_and_edges.data['subtype'] == 'initialize':
-                action_name = 'initialize'
-                story_flow.append('  - action: action_' + action_name)
-                if rasa_actions.get(action_name) == None:
-                    rasa_actions[action_name] = {"name": action_name, "data" : nodes_and_edges.data, "type" : action_name}
-
+                dummy= 1
 
             #Handle all actions 
+            if nodes_and_edges.data['subtype'] == 'initialize':
+                action_name = nodes_and_edges.data.get('var_name')
+                if rasa_actions.get(action_name) == None:
+                    rasa_actions[action_name] = {"name": action_name, "data" : nodes_and_edges.data, "type" : nodes_and_edges.data['subtype']}
+                story_flow.append('  - action: action_' + rasa_actions[action_name]["name"])
+
             if nodes_and_edges.data['subtype'] in action_nodes:
                 #Get the name of suggestion chip and its data
                 action_name = nodes_and_edges.data.get('var_name')
-
                 if rasa_actions.get(action_name) == None:
                     rasa_actions[action_name] = {"name": action_name, "data" : nodes_and_edges.data, "type" : nodes_and_edges.data['subtype']}
-                
                 story_flow.append('  - action: action_' + rasa_actions[action_name]["name"])
 
 
-
         if nodes_and_edges.data['type'] == 'edge':
-            if nodes_and_edges.data['label'] != '':
+            #Transitions from Action Nodes
+            if nodes_and_edges.source_node.data['subtype'] in action_nodes or nodes_and_edges.source_node.data['subtype']=='initialize':
+                #Conditional transition
+                if nodes_and_edges.data['label'] != '':
+                    print("Conditional Edge", nodes_and_edges.data, story)
+                    #TODO change it to slot variable
+                    slot_variable = nodes_and_edges.data.get('label')
+                    comparison_type = nodes_and_edges.data.get('comparisonOperator')
+                    comparison_value = nodes_and_edges.data.get('comparisonValue')
+
+                    destination_action_name = nodes_and_edges.destination_node.data['var_name']
+                    source_action_name = nodes_and_edges.source_node.data['var_name']
+                    condition_config = {"slot_name": slot_variable, "comparison": comparison_type, "slot_value": comparison_value, "followup_action": destination_action_name}               
+
+                    if rasa_actions[source_action_name].get('conditional_transitions'):
+                        #Check if transition already added
+                        found = False
+                        for transition in rasa_actions[source_action_name].get('conditional_transitions'):
+                            if transition["followup_action"] == condition_config["followup_action"]:
+                                found = True
+                        if found == False:
+                            rasa_actions[source_action_name]["conditional_transitions"].append(condition_config)
+                    else:
+                        rasa_actions[source_action_name]["conditional_transitions"] = [condition_config]
+
+                    continue
+
+                #Unconditional Transtions are from Action Nodes to other Action Nodes except towards "USER_INPUT" node
+                if nodes_and_edges.data['label'] == '' and nodes_and_edges.destination_node.data['subtype'] in action_nodes:
+                    #transition with no label - unconditional transition ---- Node before user input should be unconditional
+                    source_action_name = nodes_and_edges.source_node.data['var_name']
+                    destination_action_name = nodes_and_edges.destination_node.data['var_name']
+                    condition_config = {"type": "unconditional", "followup_action": destination_action_name}
+
+                    if rasa_actions[source_action_name].get('unconditional_transitions'):
+                        found = False
+                        for transition in rasa_actions[source_action_name].get('unconditional_transitions'):
+                            if transition["followup_action"] == condition_config["followup_action"]:
+                                found = True
+                        if found == False:
+                            rasa_actions[source_action_name]["unconditional_transitions"].append(condition_config)
+                    else:
+                        rasa_actions[source_action_name]["unconditional_transitions"] = [condition_config]
+                    
+                    continue
+
+
+            #Transitions from USER_INPUT nodes are always INTENTS
+            if nodes_and_edges.data['label'] != '' and nodes_and_edges.source_node.data['subtype'] == 'userinput':
+                #Transition after userinput node is always Intent Edges
                 intent_name = nodes_and_edges.data['label']
                 story_flow.append('  - intent: ' + intent_name)
 
                 #NLU items to be created  from user input
                 if rasa_intents.get(intent_name) == None:
                     rasa_intents[intent_name] = {"name": intent_name, "data" : nodes_and_edges.data}
+
+                continue
+
+
+
+            
 
     story_file.write('\n'.join(story_flow) + '\n')
 
@@ -158,10 +198,6 @@ def traverse_graph(node, list_of_prev_nodes, append_nodes):
         current_append_node.append(edge.destination_node)
         destination_node = edge.destination_node
 
-        #For consecutive actions - Add next_node_data 
-        if node.data.get('subtype') in action_nodes and destination_node.data.get('subtype') in action_nodes:
-            node.data['next_node_data'] = destination_node.data
-
         if destination_node.traversed == True:
             #print("Loopback - New Story:: ", edge.source_node.node_id, "->" , edge.edge_id ,"->",edge.destination_node.node_id)
 
@@ -172,17 +208,36 @@ def traverse_graph(node, list_of_prev_nodes, append_nodes):
 
     return
 
+
+
+
+#Add initialize to graph of Start Node -> {start_dest_edge} converted into below
+#start_node -> initialize_edge -> initialize_node  [start_node.outgoing_edges]=> {start_dest_edge}
 #Add initialize action
-initialize_node = Node("initialize_node", "node")
-initialize_node.data = {"name":"initialize", "type":"node", "subtype": "initialize", "label":"initialize" ,"data": start_node.data}
-initialize_node.data["next_node_data"] = start_node.outgoing_edges[0].destination_node.data
-#print("daaa",  start_node.outgoing_edges[0].destination_node.data)
-
-initialize_edge = Edge("initialize_edge", "edge")
-initialize_edge.data = {"type":"edge", "subtype": "edge", "label": ""}
+def add_initialize(start_node):
+    initialize_node = Node("initialize_node", "node")
+    initialize_node.data = {"var_name":"initialize", "type":"node", "subtype": "initialize", "label":"initialize" ,"data": start_node.data}
+    #Set incoming and outgoing edges
+    initialize_node.outgoing_edges = start_node.outgoing_edges
 
 
-traverse_graph(start_node, list([]), list([start_node, initialize_node, initialize_edge]))
+    initialize_edge = Edge("initialize_edge", "edge")
+    initialize_edge.data = {"type":"edge", "subtype": "edge", "label": ""}
+    initialize_edge.source_node = start_node
+    initialize_edge.destination_node = initialize_node
+
+    initialize_node.incoming_edges = [initialize_edge]
+
+    for edges in initialize_node.outgoing_edges:
+        edges.source_node = initialize_node
+
+    start_node.outgoing_edges = [initialize_edge]
+
+    return start_node
+
+
+start_node = add_initialize(start_node)
+traverse_graph(start_node, list([]), list([start_node]))
 story_file.close()
 
 
@@ -247,7 +302,6 @@ def generate_domain(rasa_intents, rasa_actions):
 generate_domain(rasa_intents, rasa_actions)
 
 
-
 def generate_action_slots(rasa_actions):
 
     with open(config_file_name, 'w') as configs:
@@ -258,15 +312,19 @@ def generate_action_slots(rasa_actions):
             if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "suggestionchip" :
                 data = rasa_actions[rasa_actions_key]['data']
                 name = rasa_actions[rasa_actions_key]['name']
-
-                configs.write('data["suggestions_text_' + name + '"] = "' + data['description'] + '"\n')
+                configs.write('data["suggestions_text_' + name + '"] = """' + data['description'] + '"""\n')
                 configs.write('data["suggestions_options_' + name + '"] = ' + json.dumps(data['rowChip']) + '\n')
+
+            if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "carousel" :
+                data = rasa_actions[rasa_actions_key]['data']
+                name = rasa_actions[rasa_actions_key]['name']
+                configs.write('data["carousel_options_' + name + '"] = ' + json.dumps(data['rowChip']) + '\n')
+
 
             if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "text" :
                 data = rasa_actions[rasa_actions_key]['data']
                 name = rasa_actions[rasa_actions_key]['name']
-
-                configs.write('data["text_' + name + '"] = "' + data['description'] + '"\n')
+                configs.write('data["text_' + name + '"] = """' + data['description'] + '"""\n')
 
             if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "closenode" :
                 data = rasa_actions[rasa_actions_key]['data']
@@ -274,7 +332,6 @@ def generate_action_slots(rasa_actions):
                 configs.write('data["disposition_' + name + '"] = "' + data['dispositionName'] + '"\n')            
 
 generate_action_slots(rasa_actions)
-
 
 
 def generate_action_class_file(rasa_actions):
@@ -370,12 +427,7 @@ class ActionInitialize(Action):
 
       slots = []
       {{value_set}}
-      
-      next_is_action = True
-      if next_is_action == {{next_is_action}}:
-          #Action name which will execute next
-          slots.append(FollowupAction("{{followup_action_name}}"))
-
+      {{transition_logic}}
       return slots
     '''
     initialize_tm = Template(initialize_template_raw)
@@ -398,24 +450,37 @@ class ActionSuggestionChip{{ counter }}(Action):
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
-      suggestion_chip = "{{ name }}"
-
-      suggestion_chip_options_json = configs.data['suggestions_options_' + suggestion_chip]
-      suggestion_chip_text = configs.data['suggestions_text_' + suggestion_chip]
+      suggestion_chip_options_json = configs.data['suggestions_options_{{ name }}']
+      suggestion_chip_text = configs.data['suggestions_text_{{ name }}']
       suggestion_chip_text = resolve_response(suggestion_chip_text, tracker)
-
       dispatcher.utter_message(text=suggestion_chip_text, platform_json=suggestion_chip_options_json)
 
       slots = []
-
-      next_is_action = True
-      if next_is_action == {{next_is_action}}:
-          #Action name which will execute next
-          slots.append(FollowupAction("{{followup_action_name}}"))
-
+      {{transition_logic}}
       return slots
     '''
     suggestion_tm = Template(suggestion_template_raw)
+
+
+    carousel_template_raw = '''
+class ActionCarouselChip{{ counter }}(Action):
+   def name(self) -> Text:
+      return "action_{{ name }}"
+
+   def run(self,
+           dispatcher: CollectingDispatcher,
+           tracker: Tracker,
+           domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+
+      carousel_chip_options_json = configs.data['carousel_options_{{ name }}']
+      dispatcher.utter_message(text='carousel options', platform_json=carousel_chip_options_json)
+
+      slots = []
+      {{transition_logic}}
+      return slots
+    '''
+    carousel_tm = Template(carousel_template_raw)
+
 
     text_template_raw = '''
 class ActionTextResponse{{ counter }}(Action):
@@ -427,20 +492,12 @@ class ActionTextResponse{{ counter }}(Action):
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
-      text_response = "{{ name }}"
-      text_response_text = configs.data['text_' + text_response]
+      text_response_text = configs.data['text_{{ name }}']
       text_response_text = resolve_response(text_response_text, tracker)
-
-
       dispatcher.utter_message(text=text_response_text, platform_json=None)
 
       slots = []
-
-      next_is_action = True
-      if next_is_action == {{next_is_action}}:
-          #Action name which will execute next
-          slots.append(FollowupAction("{{followup_action_name}}"))
-
+      {{transition_logic}}
       return slots
     '''
     text_tm = Template(text_template_raw)
@@ -455,19 +512,11 @@ class ActionDispose{{ counter }}(Action):
            tracker: Tracker,
            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
-      dispose = "{{ name }}"
-      dispose_name = configs.data['disposition_' + dispose]
+      dispose_name = configs.data['disposition_{{ name }}']
       print("Dispose: ", dispose, dispose_name)
 
-      #dispatcher.utter_message(text=suggestion_chip_text, platform_json=suggestion_chip_options_json)
-
       slots = []
-
-      next_is_action = True
-      if next_is_action == {{next_is_action}}:
-          #Action name which will execute next
-          slots.append(FollowupAction("{{followup_action_name}}"))
-
+      {{transition_logic}}
       return slots
     '''
     dispose_tm = Template(dispose_template_raw)
@@ -504,15 +553,24 @@ class ActionAPICall{{ counter }}(Action):
       slots = []
       for key in response_json_data:
            slots.append(SlotSet(key, response_json_data[key]))
-
-      next_is_action = True
-      if next_is_action == {{next_is_action}}:
-          #Action name which will execute next
-          slots.append(FollowupAction("{{followup_action_name}}"))
-
+      {{transition_logic}}
       return slots     
     '''
     api_tm = Template(api_template_raw)
+
+
+    followup_conditional_action_raw = """
+      if tracker.get_slot('{{slot_name}}') {{comparison}} "{{slot_value}}":
+          slots.append(FollowupAction("action_{{followup_action}}"))
+          return slots
+    """
+    followup_conditional_tm = Template(followup_conditional_action_raw)
+
+
+    followup_action_raw = """   
+      slots.append(FollowupAction("action_{{followup_action}}"))
+    """
+    followup_tm = Template(followup_action_raw)
 
 
     with open(action_dir + 'action.py', 'w') as configs:
@@ -522,18 +580,27 @@ class ActionAPICall{{ counter }}(Action):
         for rasa_actions_key in rasa_actions:
             class_counter = class_counter + 1
 
-            next_is_action = False
-            followup_action_name = None
+            #Handle transition logic from action
+            transition_logic = ""
+            if rasa_actions[rasa_actions_key].get('type') in action_nodes or rasa_actions[rasa_actions_key].get('type') == "initialize":
+              
+                if rasa_actions[rasa_actions_key].get('conditional_transitions'):
+                    for transiton in rasa_actions[rasa_actions_key]['conditional_transitions']:
+                        condition = followup_conditional_tm.render(slot_name=transiton["slot_name"], comparison=transiton["comparison"], slot_value=transiton["slot_value"], followup_action=transiton["followup_action"])
+                        transition_logic = transition_logic + condition
+
+                if rasa_actions[rasa_actions_key].get('unconditional_transitions'):
+                    for transiton in rasa_actions[rasa_actions_key]['unconditional_transitions']:
+                        condition = followup_tm.render(followup_action=transiton["followup_action"])
+                        transition_logic = transition_logic + condition
+                    
+                    if rasa_actions[rasa_actions_key].get('type') == "initialize":
+                        print("---", rasa_actions[rasa_actions_key])
 
             #INITIALIZE THE SLOTS in action_initialize - set default values if its not set 
+            if rasa_actions[rasa_actions_key].get('type') == "initialize" :
 
-
-            if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "initialize" :
- 
-                if rasa_actions[rasa_actions_key]["data"].get('next_node_data'):
-                    next_is_action = True
-                    followup_action_name =  "action_" + rasa_actions[rasa_actions_key]["data"].get('next_node_data')['var_name']
-
+                #print("Init", rasa_actions[rasa_actions_key])
                 all_slot_str = []
                 for slot in rasa_slots:
                     if rasa_slots[slot].get("value"):
@@ -544,37 +611,31 @@ class ActionAPICall{{ counter }}(Action):
                         all_slot_str.append(if_cond)
 
                 final_slots = ''.join(all_slot_str)
-                i_msg = initialize_tm.render(value_set=final_slots, next_is_action=next_is_action, followup_action_name=followup_action_name)
+                i_msg = initialize_tm.render(value_set=final_slots, transition_logic=transition_logic)
                 configs.write(i_msg)
                 continue
 
+            if rasa_actions[rasa_actions_key].get('type') == "suggestionchip" :
+                s_msg = suggestion_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter, transition_logic=transition_logic)
+                configs.write(s_msg)
 
+            if rasa_actions[rasa_actions_key].get('type') == "carousel" :
+                #print("Carausel", rasa_actions[rasa_actions_key]["data"])
+                c_msg = carousel_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter, transition_logic=transition_logic)
+                configs.write(c_msg)  
 
-            if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') in action_nodes:
+            if rasa_actions[rasa_actions_key].get('type') == "text" :
+                t_msg = text_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter, transition_logic=transition_logic)
+                configs.write(t_msg)
 
-                #If next node data is defined, then next node is action node to be treated as FollowupAction
-                if rasa_actions[rasa_actions_key]["data"].get('next_node_data'):
-                    #print(rasa_actions_key, rasa_actions[rasa_actions_key])
-                    next_is_action = True
-                    followup_action_name = "action_" + rasa_actions[rasa_actions_key]['data'].get('next_node_data')['var_name']
+            if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "closenode" :
+                d_msg = dispose_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter, transition_logic=transition_logic)
+                configs.write(d_msg)  
 
-                if rasa_actions[rasa_actions_key].get('type') == "suggestionchip" :
-                    #print("Suggestion Chip -",   rasa_actions[rasa_actions_key]['name'], rasa_actions[rasa_actions_key].get('next_node_data'))
-                    s_msg = suggestion_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter, next_is_action=next_is_action, followup_action_name=followup_action_name)
-                    configs.write(s_msg)
-
-                if rasa_actions[rasa_actions_key].get('type') == "text" :
-                    t_msg = text_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter, next_is_action=next_is_action, followup_action_name=followup_action_name)
-                    configs.write(t_msg)
-
-                if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "closenode" :
-                    d_msg = dispose_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter, next_is_action=next_is_action, followup_action_name=followup_action_name)
-                    configs.write(d_msg)  
-
-                if rasa_actions[rasa_actions_key].get('type') == "apicalling" :
-                    #print("API Calling", rasa_actions[rasa_actions_key]["data"])
-                    api_msg = api_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter, url=rasa_actions[rasa_actions_key]["data"]["url"], request_data=rasa_actions[rasa_actions_key]["data"]["request_json"], response_json=rasa_actions[rasa_actions_key]["data"]["response_json"], next_is_action=next_is_action, followup_action_name=followup_action_name)
-                    configs.write(api_msg)  
+            if rasa_actions[rasa_actions_key].get('type') == "apicalling" :
+                #print("API Calling", rasa_actions[rasa_actions_key]["data"])
+                api_msg = api_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter, url=rasa_actions[rasa_actions_key]["data"]["url"], request_data=rasa_actions[rasa_actions_key]["data"]["request_json"], response_json=rasa_actions[rasa_actions_key]["data"]["response_json"], transition_logic=transition_logic)
+                configs.write(api_msg)  
 
 
     return
