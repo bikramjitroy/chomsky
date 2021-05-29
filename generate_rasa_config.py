@@ -81,7 +81,7 @@ def processFlow(story_traverse_list):
                 # Create a triggeting intent which will start the BOT
                 intent_name = "start"
                 if rasa_intents.get(intent_name) == None:
-                    rasa_intents[intent_name] = {"name": intent_name, "data" : nodes_and_edges.data}
+                    rasa_intents[intent_name] = {"name": intent_name, "data" : nodes_and_edges.data, "nlu": ["start"]}
                     #In this actions all slots default value is set
                     #SLOTS extraction from start node
                     slot_json = nodes_and_edges.data['bot_slots']
@@ -116,12 +116,11 @@ def processFlow(story_traverse_list):
             #Transitions from Action Nodes
             if nodes_and_edges.source_node.data['subtype'] in action_nodes or nodes_and_edges.source_node.data['subtype']=='initialize':
                 #Conditional transition
-                if nodes_and_edges.data['label'] != '':
+                if nodes_and_edges.data.get('subtype') == 'Conditional':
                     #print("Conditional Edge", nodes_and_edges.data, story)
-                    #TODO change it to slot variable
-                    slot_variable = nodes_and_edges.data.get('label')
-                    comparison_type = nodes_and_edges.data.get('comparisonOperator')
-                    comparison_value = nodes_and_edges.data.get('comparisonValue')
+                    slot_variable = nodes_and_edges.data.get('Slot_Variable')
+                    comparison_type = nodes_and_edges.data.get('Comparison_Type')
+                    comparison_value = nodes_and_edges.data.get('Comparison_Value')
 
                     destination_action_name = nodes_and_edges.destination_node.data['var_name']
                     source_action_name = nodes_and_edges.source_node.data['var_name']
@@ -164,13 +163,11 @@ def processFlow(story_traverse_list):
             if nodes_and_edges.data['label'] != '' and nodes_and_edges.source_node.data['subtype'] == 'userinput':
                 #Transition after userinput node is always Intent Edges
                 intent_name = nodes_and_edges.data['label']
-                #print("Intent-Name", intent_name, story)
-
+                #print("Intent-Name", nodes_and_edges.data, story)
                 story_flow.append('  - intent: ' + intent_name)
-
                 #NLU items to be created  from user input
                 if rasa_intents.get(intent_name) == None:
-                    rasa_intents[intent_name] = {"name": intent_name, "data" : nodes_and_edges.data}
+                    rasa_intents[intent_name] = {"name": intent_name, "data" : nodes_and_edges.data, "nlu": nodes_and_edges.data.get('examples')}
 
                 continue
 
@@ -249,10 +246,15 @@ def generate_nlu(rasa_intents):
         f.write('\n')
         f.write('nlu:\n')
         for rasa_intent_key in rasa_intents:
+            #print("Intent:-", rasa_intents[rasa_intent_key])
             intent_name = rasa_intents[rasa_intent_key]['name']
             f.write('- intent: ' + intent_name  +'\n')
             f.write('  examples: |\n')
-            f.write('    - ' + intent_name + '\n')
+            if rasa_intents[rasa_intent_key].get('nlu'):
+                for example in rasa_intents[rasa_intent_key]['nlu']:
+                    f.write('    - ' + example + '\n')
+            else:
+                print("Mussing NLU", rasa_intents[rasa_intent_key])
     return
 
 generate_nlu(rasa_intents)
