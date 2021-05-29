@@ -24,7 +24,9 @@ def populateGraphFromJson(jsonFile):
     start_node = None
     for i in range(len(parsedJson)):
         #print(parsedJson[i])
-        if parsedJson[i]['type'] != 'smoothstep':
+
+        #The Nodes
+        if parsedJson[i]['data']['type'] == "node":
             #Sample node data
             #{'id': 'dndnode_0', 'type': 'selectorNodeStart', 'position': {'x': -60, 'y': -360}, 'label': 'Start', 'data': {'label': 'Start', 'description': 'Start Point', 'subtype': '', 'type': 'node', 'image': 'eye.svg', 'class': 'blockyGrey'}}
             nodeData = parsedJson[i]
@@ -36,15 +38,15 @@ def populateGraphFromJson(jsonFile):
             if node.node_type == 'selectorNodeStart':
                 start_node = node
 
-        else:
+        elif parsedJson[i]['data']['type'] == "edge":
             #Sample edge data
             #{'source': 'dndnode_0', 'sourceHandle': 'a', 'target': 'dndnode_1', 'targetHandle': 'a', 'type': 'smoothstep', 'animated': False, 'label': '', 'data': {'label': '', 'type': 'edge'}, 'id': 'react_edge_edge_1', 'arrowHeadType': 'arrow'}
             edgeData = parsedJson[i]
             #print(edgeData)
             #create edge object
+            #{"source":"dndnode_28","sourceHandle":"b","target":"dndnode_4","targetHandle":"d","animated":true,"label":"modify_order","data":{"label":"modify_order","type":"edge"},"id":"intent_edge_39","arrowHeadType":"arrowclosed","type":"step","style":{"stroke":"#f6ab6c"}}
             edge = Edge(edgeData['id'], edgeData['type'])
             edge.data = edgeData['data']
-
             source_node = node_maps[edgeData['source']]
 
             #print(source_node.node_id, edge.edge_id)
@@ -54,6 +56,8 @@ def populateGraphFromJson(jsonFile):
             destination_node = node_maps[edgeData['target']]
             edge.setDestinationNode(destination_node)
             destination_node.addIncomingEdge(edge)
+        else:
+             print("Unhandled Items: ", parsedJson[i])
 
     return start_node
 

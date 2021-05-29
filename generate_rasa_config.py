@@ -117,7 +117,7 @@ def processFlow(story_traverse_list):
             if nodes_and_edges.source_node.data['subtype'] in action_nodes or nodes_and_edges.source_node.data['subtype']=='initialize':
                 #Conditional transition
                 if nodes_and_edges.data['label'] != '':
-                    print("Conditional Edge", nodes_and_edges.data, story)
+                    #print("Conditional Edge", nodes_and_edges.data, story)
                     #TODO change it to slot variable
                     slot_variable = nodes_and_edges.data.get('label')
                     comparison_type = nodes_and_edges.data.get('comparisonOperator')
@@ -164,6 +164,8 @@ def processFlow(story_traverse_list):
             if nodes_and_edges.data['label'] != '' and nodes_and_edges.source_node.data['subtype'] == 'userinput':
                 #Transition after userinput node is always Intent Edges
                 intent_name = nodes_and_edges.data['label']
+                #print("Intent-Name", intent_name, story)
+
                 story_flow.append('  - intent: ' + intent_name)
 
                 #NLU items to be created  from user input
@@ -192,7 +194,7 @@ def traverse_graph(node, list_of_prev_nodes, append_nodes):
         return                                                                            
 
     for edge in node.outgoing_edges:
-        #print("This is intent", edge.edge_id)
+        #print("This is intent", edge.edge_id, edge.data)
         current_append_node = []
         current_append_node.append(edge)
         current_append_node.append(edge.destination_node)
@@ -594,9 +596,6 @@ class ActionAPICall{{ counter }}(Action):
                         condition = followup_tm.render(followup_action=transiton["followup_action"])
                         transition_logic = transition_logic + condition
                     
-                    if rasa_actions[rasa_actions_key].get('type') == "initialize":
-                        print("---", rasa_actions[rasa_actions_key])
-
             #INITIALIZE THE SLOTS in action_initialize - set default values if its not set 
             if rasa_actions[rasa_actions_key].get('type') == "initialize" :
 
