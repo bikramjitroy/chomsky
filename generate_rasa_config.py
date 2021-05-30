@@ -4,6 +4,7 @@ import pathlib
 
 import shutil
 import os
+import re
 
 from jinja2 import Template
 from graph_structure import Node, Edge
@@ -171,6 +172,23 @@ def processFlow(story_traverse_list):
                 intent_name = nodes_and_edges.data['label']
                 #print("Intent-Name", nodes_and_edges.data, story)
                 story_flow.append('  - intent: ' + intent_name)
+
+
+                #Entity examples:
+                first_example = nodes_and_edges.data['examples'][0]
+                entities_arr = re.findall('\[(.+?)\)', first_example)
+
+                if len(entities_arr) > 0:
+                    story_flow.append('    entities:')
+                for entities_str in entities_arr:
+                    ent_ex = entities_str.split('](')
+                    story_flow.append('    - ' + ent_ex[1] + ': ' + ent_ex[0])
+
+                for entities_str in entities_arr:
+                    ent_ex = entities_str.split('](')
+                    story_flow.append('  - slot_was_set:')
+                    story_flow.append('    - ' + ent_ex[1] + ': ' + ent_ex[0])               
+
                 #NLU items to be created  from user input
                 if rasa_intents.get(intent_name) == None:
                     rasa_intents[intent_name] = {"name": intent_name, "data" : nodes_and_edges.data, "nlu": nodes_and_edges.data.get('examples')}
