@@ -11,7 +11,7 @@ from graph_structure import Node, Edge
 
 # %%
 
-start_node = populateGraphFromJson('sample_json/Bot-Json.json')
+start_node = populateGraphFromJson('sample_json/Bot-Json_mod.json')
 base_dir = "rasa_config/"
 
 
@@ -49,7 +49,7 @@ config_file_name = action_dir + '/configs.py'
 
 story_counter = 0
 
-action_nodes = ['suggestionchip', 'text', 'closenode', 'apicalling','carousel']
+action_nodes = ['suggestionchip', 'text', 'closenode', 'apicalling','carousel','scriptnode']
 
 rasa_intents = {}
 rasa_actions = {}
@@ -94,73 +94,79 @@ def processFlow(story_traverse_list):
                         rasa_entities[slot_name] = {"name": slot_name}
 
             #Edges of userinput are intents - Handle that in Edges - This is a marker Node
-            if nodes_and_edges.data['subtype'] == 'userinput':
+            elif nodes_and_edges.data['subtype'] == 'userinput':
                 dummy= 1
 
             #Handle all actions 
-            if nodes_and_edges.data['subtype'] == 'initialize':
+            elif nodes_and_edges.data['subtype'] == 'initialize':
                 action_name = nodes_and_edges.data.get('var_name')
                 if rasa_actions.get(action_name) == None:
                     rasa_actions[action_name] = {"name": action_name, "data" : nodes_and_edges.data, "type" : nodes_and_edges.data['subtype']}
                 story_flow.append('  - action: action_' + rasa_actions[action_name]["name"])
 
-            if nodes_and_edges.data['subtype'] in action_nodes:
+            elif nodes_and_edges.data['subtype'] in action_nodes:
                 #Get the name of suggestion chip and its data
                 action_name = nodes_and_edges.data.get('var_name')
                 if rasa_actions.get(action_name) == None:
                     rasa_actions[action_name] = {"name": action_name, "data" : nodes_and_edges.data, "type" : nodes_and_edges.data['subtype']}
                 story_flow.append('  - action: action_' + rasa_actions[action_name]["name"])
+            else:
+                print("Subtype not handled", nodes_and_edges.data['subtype'])
 
 
         if nodes_and_edges.data['type'] == 'edge':
             #Transitions from Action Nodes
             if nodes_and_edges.source_node.data['subtype'] in action_nodes or nodes_and_edges.source_node.data['subtype']=='initialize':
-                #Conditional transition
-                if nodes_and_edges.data.get('subtype') == 'Conditional':
-                    #print("Conditional Edge", nodes_and_edges.data, story)
-                    slot_variable = nodes_and_edges.data.get('Slot_Variable')
-                    comparison_type = nodes_and_edges.data.get('Comparison_Type')
-                    comparison_value = nodes_and_edges.data.get('Comparison_Value')
+                if nodes_and_edges.destination_node.data['subtype'] in action_nodes:
+                    #Conditional transition
+                    if nodes_and_edges.data.get('subtype') == 'Conditional':
+                        #print("Conditional Edge", nodes_and_edges.data, story)
+                        slot_variable = nodes_and_edges.data.get('Slot_Variable')
+                        comparison_type = nodes_and_edges.data.get('Comparison_Type')
+                        comparison_value = nodes_and_edges.data.get('Comparison_Value')
 
-                    destination_action_name = nodes_and_edges.destination_node.data['var_name']
-                    source_action_name = nodes_and_edges.source_node.data['var_name']
-                    condition_config = {"slot_name": slot_variable, "comparison": comparison_type, "slot_value": comparison_value, "followup_action": destination_action_name}               
+                        destination_action_name = nodes_and_edges.destination_node.data['var_name']
+                        source_action_name = nodes_and_edges.source_node.data['var_name']
+                        condition_config = {"slot_name": slot_variable, "comparison": comparison_type, "slot_value": comparison_value, "followup_action": destination_action_name}               
 
-                    if rasa_actions[source_action_name].get('conditional_transitions'):
-                        #Check if transition already added
-                        found = False
-                        for transition in rasa_actions[source_action_name].get('conditional_transitions'):
-                            if transition["followup_action"] == condition_config["followup_action"]:
-                                found = True
-                        if found == False:
-                            rasa_actions[source_action_name]["conditional_transitions"].append(condition_config)
-                    else:
-                        rasa_actions[source_action_name]["conditional_transitions"] = [condition_config]
+                        if rasa_actions[source_action_name].get('conditional_transitions'):
+                            #Check if transition already added
+                            found = False
+                            for transition in rasa_actions[source_action_name].get('conditional_transitions'):
+                                if transition["followup_action"] == condition_config["followup_action"]:
+                                    found = True
+                            if found == False:
+                                rasa_actions[source_action_name]["conditional_transitions"].append(condition_config)
+                        else:
+                            rasa_actions[source_action_name]["conditional_transitions"] = [condition_config]
 
-                    continue
+                        continue
+                    # else:
+                    #     print("Types", nodes_and_edges.data.get('subtype'))
 
-                #Unconditional Transtions are from Action Nodes to other Action Nodes except towards "USER_INPUT" node
-                if nodes_and_edges.data['label'] == '' and nodes_and_edges.destination_node.data['subtype'] in action_nodes:
-                    #transition with no label - unconditional transition ---- Node before user input should be unconditional
-                    source_action_name = nodes_and_edges.source_node.data['var_name']
-                    destination_action_name = nodes_and_edges.destination_node.data['var_name']
-                    condition_config = {"type": "unconditional", "followup_action": destination_action_name}
+                    #Unconditional Transtions are from Action Nodes to other Action Nodes except towards "USER_INPUT" node
+                    if nodes_and_edges.data.get('subtype') == 'Normal':
+                        #transition with no label - unconditional transition ---- Node before user input should be unconditional
+                        source_action_name = nodes_and_edges.source_node.data['var_name']
+                        destination_action_name = nodes_and_edges.destination_node.data['var_name']
+                        condition_config = {"type": "unconditional", "followup_action": destination_action_name}
 
-                    if rasa_actions[source_action_name].get('unconditional_transitions'):
-                        found = False
-                        for transition in rasa_actions[source_action_name].get('unconditional_transitions'):
-                            if transition["followup_action"] == condition_config["followup_action"]:
-                                found = True
-                        if found == False:
-                            rasa_actions[source_action_name]["unconditional_transitions"].append(condition_config)
-                    else:
-                        rasa_actions[source_action_name]["unconditional_transitions"] = [condition_config]
-                    
-                    continue
+                        if rasa_actions[source_action_name].get('unconditional_transitions'):
+                            #Check if transition already added
+                            found = False
+                            for transition in rasa_actions[source_action_name].get('unconditional_transitions'):
+                                if transition["followup_action"] == condition_config["followup_action"]:
+                                    found = True
+                            if found == False:
+                                rasa_actions[source_action_name]["unconditional_transitions"].append(condition_config)
+                        else:
+                            rasa_actions[source_action_name]["unconditional_transitions"] = [condition_config]
+                        
+                        continue
 
 
             #Transitions from USER_INPUT nodes are always INTENTS
-            if nodes_and_edges.data['label'] != '' and nodes_and_edges.source_node.data['subtype'] == 'userinput':
+            if nodes_and_edges.source_node.data['subtype'] == 'userinput':
                 #Transition after userinput node is always Intent Edges
                 intent_name = nodes_and_edges.data['label']
                 #print("Intent-Name", nodes_and_edges.data, story)
@@ -563,6 +569,22 @@ class ActionAPICall{{ counter }}(Action):
     '''
     api_tm = Template(api_template_raw)
 
+    script_template_raw = '''
+class ActionScript{{ counter }}(Action):
+   def name(self) -> Text:
+      return "action_{{ name }}"
+
+   def run(self,
+           dispatcher: CollectingDispatcher,
+           tracker: Tracker,
+           domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+
+      slots = []
+      {{transition_logic}}
+      return slots
+    '''
+    script_tm = Template(script_template_raw)
+
 
     followup_conditional_action_raw = """
       if tracker.get_slot('{{slot_name}}') {{comparison}} "{{slot_value}}":
@@ -617,27 +639,33 @@ class ActionAPICall{{ counter }}(Action):
                 configs.write(i_msg)
                 continue
 
-            if rasa_actions[rasa_actions_key].get('type') == "suggestionchip" :
+            elif rasa_actions[rasa_actions_key].get('type') == "suggestionchip" :
                 s_msg = suggestion_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter, transition_logic=transition_logic)
                 configs.write(s_msg)
 
-            if rasa_actions[rasa_actions_key].get('type') == "carousel" :
+            elif rasa_actions[rasa_actions_key].get('type') == "carousel" :
                 #print("Carausel", rasa_actions[rasa_actions_key]["data"])
                 c_msg = carousel_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter, transition_logic=transition_logic)
                 configs.write(c_msg)  
 
-            if rasa_actions[rasa_actions_key].get('type') == "text" :
+            elif rasa_actions[rasa_actions_key].get('type') == "text" :
                 t_msg = text_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter, transition_logic=transition_logic)
                 configs.write(t_msg)
 
-            if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "closenode" :
+            elif rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "closenode" :
                 d_msg = dispose_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter, transition_logic=transition_logic)
                 configs.write(d_msg)  
 
-            if rasa_actions[rasa_actions_key].get('type') == "apicalling" :
+            elif rasa_actions[rasa_actions_key].get('type') == "apicalling" :
                 #print("API Calling", rasa_actions[rasa_actions_key]["data"])
                 api_msg = api_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter, url=rasa_actions[rasa_actions_key]["data"]["url"], request_data=rasa_actions[rasa_actions_key]["data"]["request_json"], response_json=rasa_actions[rasa_actions_key]["data"]["response_json"], transition_logic=transition_logic)
                 configs.write(api_msg)  
+
+            elif rasa_actions[rasa_actions_key].get('type') == "scriptnode" :
+                d_msg = script_tm.render(name=rasa_actions[rasa_actions_key]['name'], counter=class_counter, transition_logic=transition_logic)
+                configs.write(d_msg)
+            else:
+                print("Unghandled Action Type", rasa_actions[rasa_actions_key].get('type'))
 
 
     return
