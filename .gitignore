@@ -4,3 +4,4 @@ __pycache__
 resources/action/
 integration_module/node_modules
 rasa_config_new/
+certs/

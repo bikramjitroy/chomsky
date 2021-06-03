@@ -29,7 +29,7 @@ def get_bot_flow_diagram_by_bot_id(db: Session, bot_id: str):
 
 def provision_bot(db: Session, bot_id: str, id: str):
     response = db.query(models.BotFlowDiagram).filter(models.BotFlowDiagram.bot_id == bot_id and models.BotFlowDiagram.id == id).first()
-    config_path = "/tmp/rasa_config/" + id + "/"
+    config_path = "/dacx/bot_generator/bots/" + id + "/"
     #print("response", response.bot_diagram["graph"])
     bot_generation(response.bot_diagram["graph"], config_path)
 

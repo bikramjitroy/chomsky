@@ -10,7 +10,7 @@ services:
     ports:
       # Web
       #- 80:80
-      - 9006:443
+      - 9075:443
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       # Map the static conf into the container
@@ -45,6 +45,8 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       DB_PORT: ${DB_PORT}
       ORIGIN_URL: ${ORIGIN_URL}
+    volumes:
+      - /dacx/bot_generator/bots/:/dacx/bot_generator/bots/
     networks:
       - proxy
 
