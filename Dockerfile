@@ -19,7 +19,7 @@ RUN apt-get update \
 COPY . /app
 WORKDIR /app/chomsky
 
-RUN pip install -r chomsky/requirements.txt
+RUN pip install -r requirements.txt
 
 # The EXPOSE command makes the port 80 accessible to the outside world (our flask service runs on port 80;
 # we need this port inside the container to be accessible outside the container).
