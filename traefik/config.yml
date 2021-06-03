@@ -1,15 +1,10 @@
 http:
   routers:
-    # traefik:
-    #   entryPoints:
-    #     - "secureport"
-    #   rule: "Host(`vbmonitor.ameyo.net`)"
-    #   service: "api@internal"
-    vbanalytics:
+    chomsky:
       entryPoints:
         - "secureport"
       rule: "PathPrefix(`/api/v1`)"
-      service: analytics-serve
+      service: chomsky-serve
       tls: true
       middlewares:
         - "api-stripprefix"
@@ -23,11 +18,10 @@ http:
 
   services:
     # Define how to reach an existing service on our infrastructure
-    analytics-serve:
+    chomsky-serve:
       loadBalancer:
         servers:
-        - url: http://analytics-container:8000/
-
+          - url: http://chomsky-container:8000/
 
 tls:
   certificates:

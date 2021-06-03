@@ -1,4 +1,4 @@
-version: '3'
+version: "3"
 
 services:
   reverse-proxy:
@@ -10,7 +10,7 @@ services:
     ports:
       # Web
       #- 80:80
-      - 9005:443
+      - 9006:443
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       # Map the static conf into the container
@@ -24,19 +24,18 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.traefik-secure.entrypoints=secureport"
-      - "traefik.http.routers.traefik-secure.rule=Host(`vbmonitor.ameyo.net`)"
+      - "traefik.http.routers.traefik-secure.rule=Host(`chomsky.ameyo.net`)"
       #- "traefik.http.routers.traefik-secure.middlewares=traefik-auth"
       - "traefik.http.routers.traefik-secure.tls=true"
       - "traefik.http.routers.traefik-secure.service=api@internal"
 
-
-  analytics-container:
+  chomsky-container:
     build:
       context: .
       dockerfile: Dockerfile
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.vbanalytics.entrypoints=secureport"
+      - "traefik.http.routers.chomsky.entrypoints=secureport"
     security_opt:
       - no-new-privileges:true
     environment:
