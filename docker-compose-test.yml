@@ -1,0 +1,21 @@
+version: '3'
+
+services:
+  alalytics-container:
+    build:
+      context: .
+      dockerfile: Dockerfile-test
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      DB_DATABASE: ${DB_DATABASE}
+      DB_HOST: ${DB_HOST}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_PORT: ${DB_PORT}
+      ORIGIN_URL: ${ORIGIN_URL}
+    networks:
+      - proxy
+
+networks:
+  proxy:

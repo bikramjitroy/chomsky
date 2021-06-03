@@ -1,0 +1,53 @@
+version: '3'
+
+services:
+  reverse-proxy:
+    image: traefik:v2.3
+    container_name: traefik
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      # Web
+      #- 80:80
+      - 9005:443
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Map the static conf into the container
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      # Map the dynamic conf into the container
+      - ./traefik/config.yml:/etc/traefik/config.yml:ro
+      # Map the certificats into the container
+      - ./certs:/etc/certs:ro
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik-secure.entrypoints=secureport"
+      - "traefik.http.routers.traefik-secure.rule=Host(`vbmonitor.ameyo.net`)"
+      #- "traefik.http.routers.traefik-secure.middlewares=traefik-auth"
+      - "traefik.http.routers.traefik-secure.tls=true"
+      - "traefik.http.routers.traefik-secure.service=api@internal"
+
+
+  analytics-container:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.vbanalytics.entrypoints=secureport"
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      DB_DATABASE: ${DB_DATABASE}
+      DB_HOST: ${DB_HOST}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_PORT: ${DB_PORT}
+      ORIGIN_URL: ${ORIGIN_URL}
+    networks:
+      - proxy
+
+networks:
+  proxy:

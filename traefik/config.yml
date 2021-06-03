@@ -1,0 +1,37 @@
+http:
+  routers:
+    # traefik:
+    #   entryPoints:
+    #     - "secureport"
+    #   rule: "Host(`vbmonitor.ameyo.net`)"
+    #   service: "api@internal"
+    vbanalytics:
+      entryPoints:
+        - "secureport"
+      rule: "PathPrefix(`/api/v1`)"
+      service: analytics-serve
+      tls: true
+      middlewares:
+        - "api-stripprefix"
+
+  middlewares:
+    api-stripprefix:
+      stripPrefix:
+        prefixes:
+          - "/api/v1"
+        forceSlash: false
+
+  services:
+    # Define how to reach an existing service on our infrastructure
+    analytics-serve:
+      loadBalancer:
+        servers:
+        - url: http://analytics-container:8000/
+
+
+tls:
+  certificates:
+    - certFile: "/etc/certs/star_ameyo_net.crt"
+      keyFile: "/etc/certs/star_ameyo_net.key"
+      stores:
+        - default

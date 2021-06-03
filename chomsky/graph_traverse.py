@@ -5,20 +5,13 @@ import json
 from graph_structure import Node, Edge
 
 
-# %%
-def loadConfigurationJson(filePath):
-    with open(filePath, 'r') as myfile:
-        data=myfile.read()
-    obj = json.loads(data)
-    return obj
 
 
 # %%
 #parsedJson = loadConfigurationJson('Bot-Json.json')
 #print(parsedJson)
 
-def populateGraphFromJson(jsonFile):
-    parsedJson = loadConfigurationJson(jsonFile)
+def populateGraphFromJson(parsedJson):
 
     node_maps = {}
     start_node = None
