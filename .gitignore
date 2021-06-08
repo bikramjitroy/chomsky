@@ -5,3 +5,4 @@ resources/action/
 integration_module/node_modules
 rasa_config_new/
 certs/
+chomsky/resources/rasa_base_config/custom_spacy_model/nl_model-0.0.0/vocab/vectors
