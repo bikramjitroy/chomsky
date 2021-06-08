@@ -1,0 +1,1 @@
+chomsky/resources/rasa_base_config/custom_spacy_model/nl_model-0.0.0/vocab/vectors filter=lfs diff=lfs merge=lfs -text
