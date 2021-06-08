@@ -9,6 +9,8 @@ import re
 from jinja2 import Template
 from graph_structure import Node, Edge
 
+import distutils
+from distutils import dir_util
 
 # %%
 
@@ -24,30 +26,22 @@ def bot_generation(json_bot_diagram, base_dir):
 
     start_node = populateGraphFromJson(json_bot_diagram)
 
-    pathlib.Path(base_dir).mkdir(parents=True, exist_ok=True)
+    #pathlib.Path(base_dir).mkdir(parents=True, exist_ok=True)
 
-    data_dir = base_dir + '/data/'
-    action_dir = base_dir + '/actions/'
-    #custom_slots = base_dir + '/addons/'
+    distutils.dir_util.copy_tree("resources", base_dir)
 
+    domain_file_name = base_dir + '/rasa/domain.yml'
+
+    data_dir = base_dir + '/rasa/data/'
     pathlib.Path(data_dir).mkdir(parents=True, exist_ok=True)
-    pathlib.Path(action_dir).mkdir(parents=True, exist_ok=True)
-    #pathlib.Path(custom_slots).mkdir(parents=True, exist_ok=True)
-
-    shutil.copyfile('resources/endpoints.yml', base_dir + 'endpoints.yml')
-    shutil.copyfile('resources/credentials.yml', base_dir + 'credentials.yml')
-    shutil.copyfile('resources/config.yml', base_dir + 'config.yml')
-    #shutil.copyfile('resources/action/action.py', action_dir + '/action.py')
-    #shutil.copyfile('resources/action/addons/custom_slots.py', custom_slots + 'custom_slots.py')
-
-    pathlib.Path(action_dir + '__init__.py').touch()
-    #pathlib.Path(custom_slots + '__init__.py').touch()
-
-
-    domain_file_name = base_dir + '/domain.yml'
     story_file_name = data_dir + '/stories.yml'
     nlu_file_name = data_dir + '/nlu.yml'
+
+
+    action_dir = base_dir + '/actions/'
+    pathlib.Path(action_dir + '__init__.py').touch()
     config_file_name = action_dir + '/configs.py'
+    actions_file_name = action_dir + '/actions.py'
 
 
 
@@ -349,13 +343,34 @@ def bot_generation(json_bot_diagram, base_dir):
                 if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "suggestionchip" :
                     data = rasa_actions[rasa_actions_key]['data']
                     name = rasa_actions[rasa_actions_key]['name']
+
+                    chips = []
+                    for suggestion in data['rowChip']:
+                        chips.append({"reply":{"postbackData": suggestion["description"], "text": suggestion["text"]}})
+                    
                     configs.write('data["suggestions_text_' + name + '"] = """' + data['description'] + '"""\n')
-                    configs.write('data["suggestions_options_' + name + '"] = ' + json.dumps(data['rowChip']) + '\n')
+                    configs.write('data["suggestions_options_' + name + '"] = ' + json.dumps(chips) + '\n')
+
 
                 if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "carousel" :
                     data = rasa_actions[rasa_actions_key]['data']
                     name = rasa_actions[rasa_actions_key]['name']
-                    configs.write('data["carousel_options_' + name + '"] = ' + json.dumps(data['rowChip']) + '\n')
+
+                    chips = []
+                    for card_data in data['rowChip']:
+                        new_data = {}
+                        new_data['title'] = card_data["text"]
+                        new_data['description'] = card_data["text"]
+                        new_data['suggestions'] = [{"reply":{"postbackData": card_data["description"], "text": card_data["text"]}}]
+                        new_data['media'] = {'height': 'MEDIUM', 'contentInfo': {'fileUrl':card_data['image'], 'forceRefresh': 'false'}}                        
+                        chips.append(new_data)
+
+                    carousel_cards = { 'carouselCard': {'cardWidth': 'MEDIUM', 'cardContents': chips}}
+                    
+                    #configs.write('data["carousel_text_' + name + '"] = """' + data['description'] + '"""\n')
+                    configs.write('data["carousel_options_' + name + '"] = ' + json.dumps(carousel_cards) + '\n')
+
+                    #configs.write('data["carousel_options_' + name + '"] = ' + json.dumps(data['rowChip']) + '\n')
 
 
                 if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "text" :
@@ -387,7 +402,7 @@ def bot_generation(json_bot_diagram, base_dir):
         followup_conditional_tm = Template(followup_conditional_action_raw)
         followup_tm = Template(followup_action_raw)
 
-        with open(action_dir + 'action.py', 'w') as configs:
+        with open(actions_file_name, 'w') as configs:
             header_msg = header_tm.render()
             configs.write(header_msg)
 

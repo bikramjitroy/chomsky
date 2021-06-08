@@ -9,7 +9,7 @@ from rasa_sdk.executor import CollectingDispatcher
 import requests
 import json
 
-import configs
+from actions import configs
 
 def resolve_response(response_text, tracker):
     found_var = False
@@ -112,7 +112,8 @@ class ActionSuggestionChip{{ counter }}(Action):
         suggestion_chip_text = configs.data['suggestions_text_{{ name }}']
         print("SuggestionText", suggestion_chip_text)
         suggestion_chip_text = resolve_response(suggestion_chip_text, tracker)
-        dispatcher.utter_message(text=suggestion_chip_text, platform_json=suggestion_chip_options_json)
+        data = {"dialogflow_responses": [{"text": suggestion_chip_text, "fallback": suggestion_chip_text, "suggestions": suggestion_chip_options_json}]}
+        dispatcher.utter_message(json_message = data)
 
         slots = []
         {{transition_logic}}
@@ -131,7 +132,8 @@ class ActionCarouselChip{{ counter }}(Action):
             domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
         carousel_chip_options_json = configs.data['carousel_options_{{ name }}']
-        dispatcher.utter_message(text='carousel options', platform_json=carousel_chip_options_json)
+        data = {"dialogflow_responses": [{"fallback": "carousel cards", "richCard": carousel_chip_options_json}]}
+        dispatcher.utter_message(json_message = data)
 
         slots = []
         {{transition_logic}}
@@ -169,7 +171,7 @@ class ActionDispose{{ counter }}(Action):
             domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
         dispose_name = configs.data['disposition_{{ name }}']
-        print("Dispose: ", dispose, dispose_name)
+        print("Dispose: ", dispose_name)
 
         slots = []
         {{transition_logic}}

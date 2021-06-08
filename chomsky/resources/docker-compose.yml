@@ -1,0 +1,33 @@
+version: "3.4"
+
+services:
+  rasa-x:
+    restart: always
+    build:
+      context: .
+      dockerfile: Dockerfile.rasa
+      args: 
+        - SPACY_MODEL_NAME=${SPACY_MODEL_NAME}
+        - CUSTOM_SPACY_MODEL_DIR=${CUSTOM_SPACY_MODEL_DIR}
+    ports:
+      - "${RASA_PORT}:5005"
+      - "${RASA_X_PORT}:5002"
+    volumes:
+      - ./rasa:/app:rw
+    environment:
+      - RASA_X_PASSWORD=${RASA_X_PASSWORD}
+      - RASA_X_HOST="http://rasa-x:5002"
+      - RASA_TELEMETRY_ENABLED=false
+    links: 
+      - app
+  duckling:
+    restart: always
+    image: "rasa/duckling:latest"
+    command: ["duckling-example-exe", "--no-access-log", "--no-error-log"]
+  app:
+    restart: always
+    build:
+     context: ./actions
+     dockerfile: Dockerfile
+    volumes:
+      - ./actions:/app/actions:rw
