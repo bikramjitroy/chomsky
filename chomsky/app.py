@@ -22,7 +22,7 @@ origins = os.environ['ORIGIN_URL']
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -49,7 +49,7 @@ def read_root():
     return {"status": "online"}
 
 
-@app.post("/bot/{bot_id}/", response_model=schemas.BotFlowDiagram)
+@app.post("/bot/{bot_id}", response_model=schemas.BotFlowDiagram)
 def create_bot_flow_diagram(bot_id: str, bot_flow_diagram: schemas.BotFlowDiagramCreate, db: Session = Depends(get_db)):
     bot_conf = crud.create_bot_flow_diagram(db, bot_id, bot_flow_diagram)
     if bot_conf is None:

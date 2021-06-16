@@ -80,12 +80,14 @@ def bot_generation(json_bot_diagram, base_dir):
             if nodes_and_edges.data['type'] == 'node':
                 if nodes_and_edges.data['label'] == 'Start':
                     story_flow.append('  steps:')
-                    story_flow.append('  - intent: start')
+                    #DISABLE START INTENT - Customer will say hi 
+                    #story_flow.append('  - intent: start')
 
                     # Create a triggeting intent which will start the BOT
                     intent_name = "start"
                     if rasa_intents.get(intent_name) == None:
-                        rasa_intents[intent_name] = {"name": intent_name, "data" : nodes_and_edges.data, "nlu": ["start"]}
+                        #DISABLE START INTENT - Customer will say hi 
+                        #rasa_intents[intent_name] = {"name": intent_name, "data" : nodes_and_edges.data, "nlu": ["start"]}
                         #In this actions all slots default value is set
                         #SLOTS extraction from start node
                         slot_json = nodes_and_edges.data['bot_slots']

@@ -23,12 +23,12 @@ def create_bot_flow_diagram(db: Session, bot_id: str, schema: schemas.BotFlowDia
     return db_entry
 
 def get_bot_flow_diagram_by_bot_id(db: Session, bot_id: str):
-    return db.query(models.BotFlowDiagram).filter(models.BotFlowDiagram.bot_id == bot_id).first()
+    return db.query(models.BotFlowDiagram).filter(models.BotFlowDiagram.bot_id == bot_id).order_by(models.BotFlowDiagram.creation_time.desc()).first()
 
 
 
 def provision_bot(db: Session, bot_id: str, id: str):
-    response = db.query(models.BotFlowDiagram).filter(models.BotFlowDiagram.bot_id == bot_id and models.BotFlowDiagram.id == id).first()
+    response = db.query(models.BotFlowDiagram).filter(models.BotFlowDiagram.bot_id == bot_id, models.BotFlowDiagram.id == id).first()
     config_path = "/dacx/bot_generator/bots/" + id + "/"
     #print("response", response.bot_diagram["graph"])
     bot_generation(response.bot_diagram["graph"], config_path)

@@ -24,7 +24,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.traefik-secure.entrypoints=secureport"
-      - "traefik.http.routers.traefik-secure.rule=Host(`chomsky.ameyo.net`)"
+      - "traefik.http.routers.traefik-secure.rule=Host(`voicebot.ameyo.net:9075`)"
       #- "traefik.http.routers.traefik-secure.middlewares=traefik-auth"
       - "traefik.http.routers.traefik-secure.tls=true"
       - "traefik.http.routers.traefik-secure.service=api@internal"
