@@ -177,6 +177,8 @@ def bot_generation(json_bot_diagram, base_dir):
                     intent_name = nodes_and_edges.data['label']
                     #print("Intent-Name", nodes_and_edges.data, story)
                     story_flow.append('  - intent: ' + intent_name)
+                    print("Intent", intent_name)
+                    print("Intent", intent_name, nodes_and_edges.data['examples'])
 
 
                     #Entity examples:
@@ -345,6 +347,7 @@ def bot_generation(json_bot_diagram, base_dir):
                 if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "suggestionchip" :
                     data = rasa_actions[rasa_actions_key]['data']
                     name = rasa_actions[rasa_actions_key]['name']
+                    print("suggestionchip", name, data)
 
                     chips = []
                     for suggestion in data['rowChip']:
@@ -357,13 +360,14 @@ def bot_generation(json_bot_diagram, base_dir):
                 if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "carousel" :
                     data = rasa_actions[rasa_actions_key]['data']
                     name = rasa_actions[rasa_actions_key]['name']
+                    print("carousel", name, data)
 
                     chips = []
                     for card_data in data['rowChip']:
                         new_data = {}
-                        new_data['title'] = card_data["text"]
-                        new_data['description'] = card_data["text"]
-                        new_data['suggestions'] = [{"reply":{"postbackData": card_data["description"], "text": card_data["text"]}}]
+                        new_data['title'] = card_data["title"]
+                        new_data['description'] = card_data["description"]
+                        new_data['suggestions'] = [{"reply":{"postbackData": card_data["postback_text"], "text": card_data["title"]}}]
                         new_data['media'] = {'height': 'MEDIUM', 'contentInfo': {'fileUrl':card_data['image'], 'forceRefresh': 'false'}}                        
                         chips.append(new_data)
 
@@ -378,11 +382,13 @@ def bot_generation(json_bot_diagram, base_dir):
                 if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "text" :
                     data = rasa_actions[rasa_actions_key]['data']
                     name = rasa_actions[rasa_actions_key]['name']
+                    print("text", name, data)
                     configs.write('data["text_' + name + '"] = """' + data['description'] + '"""\n')
 
                 if rasa_actions[rasa_actions_key].get('type') and rasa_actions[rasa_actions_key].get('type') == "closenode" :
                     data = rasa_actions[rasa_actions_key]['data']
                     name = rasa_actions[rasa_actions_key]['name']
+                    print("closenode", name, data)
                     configs.write('data["disposition_' + name + '"] = "' + data['dispositionName'] + '"\n')            
 
     generate_action_slots(rasa_actions)
